@@ -81,6 +81,18 @@ get_pool_by_slot(Slot) ->
     State = get_state(),
     get_pool_by_slot(Slot, State).
 
+maybe_reload_slots_map(State) ->
+    try
+        NewState =  
+            reload_slots_map(State),
+        {ok,NewState}
+    catch
+        {error,cannot_connect_to_cluster} ->
+            {error,State};
+        _Other ->
+            {error,State}
+    end.
+
 -spec reload_slots_map(State::#state{}) -> NewState::#state{}.
 reload_slots_map(State) ->
     [close_connection(SlotsMap)
@@ -220,7 +232,12 @@ init(_Args) ->
     {ok, connect_(InitNodes)}.
 
 handle_call({reload_slots_map,Version}, _From, #state{version=Version} = State) ->
-    {reply, ok, reload_slots_map(State)};
+    case maybe_reload_slots_map(State) of
+        {ok,NewState} ->
+            {reply, ok, NewState};
+        {error, NewState} ->
+            {reply, error, NewState}
+    end;
 handle_call({reload_slots_map,_}, _From, State) ->
     {reply, ok, State};
 handle_call({connect, InitServers}, _From, _State) ->
