@@ -4,7 +4,8 @@
 
 %% API.
 -export([start_link/1]).
--export([query/2]).
+-export([query/2,
+         query_noreply/2]).
 
 %% gen_server.
 -export([init/1]).
@@ -41,6 +42,9 @@ init(Args) ->
 query(Worker, Commands) ->
     gen_server:call(Worker, {'query', Commands}).
 
+query_noreply(Worker, Commands) ->
+    gen_server:cast(Worker, {'query', Commands}).
+
 handle_call({'query', _}, _From, #state{conn = undefined} = State) ->
     {reply, {error, no_connection}, State};
 handle_call({'query', [[X|_]|_] = Commands}, _From, #state{conn = Conn} = State)
@@ -51,8 +55,18 @@ handle_call({'query', Command}, _From, #state{conn = Conn} = State) ->
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.
 
-handle_cast(_Msg, State) ->
+handle_cast({'query', _}, #state{conn = undefined} = State) ->
+    {noreply, {error, no_connection}, State};
+handle_cast({'query', [[X|_]|_] = Commands}, #state{conn = Conn} = State)
+    when is_list(X); is_binary(X) ->
+    eredis:qp(Conn, Commands),
+    {noreply, State};
+handle_cast({'query', Command}, #state{conn = Conn} = State) ->
+    eredis:q(Conn, Command),
+    {noreply, State};
+handle_cast(_Request, State) ->
     {noreply, State}.
+
 
 handle_info(_Info, State) ->
     {noreply, State}.

@@ -9,7 +9,7 @@
 -export([start/0, stop/0, connect/1]). % Application Management.
 
 % Generic redis call
--export([q/1, qp/1, qw/2, qk/2, qa/1, qmn/1, transaction/1, transaction/2]).
+-export([q/1, q_noreply/1, qp/1, qw/2, qk/2, qa/1, qmn/1, transaction/1, transaction/2]).
 
 % Specific redis command implementation
 -export([flushdb/0]).
@@ -150,6 +150,35 @@ split_by_pools([], _Index, CmdAcc, MapAcc, State) ->
 %% =============================================================================
 -spec qp(redis_pipeline_command()) -> redis_pipeline_result().
 qp(Commands) -> q(Commands).
+
+%% =============================================================================
+%% @doc this function for noreply request
+%% @end
+%% =============================================================================
+-spec q_noreply(redis_command()) -> redis_result().
+q_noreply(Command) ->
+    query_noreply(Command).
+
+query_noreply(Command) ->
+    PoolKey = get_key_from_command(Command),
+    query_noreply(Command, PoolKey).
+
+query_noreply(_, undefined) ->
+    {error, invalid_cluster_command};
+query_noreply(Command, PoolKey) ->
+    Slot = get_key_slot(PoolKey),
+    Transaction = fun(Worker) -> qw_noreply(Worker, Command) end,
+    query_noreply(Transaction, Slot, 0).
+
+query_noreply(_, _, ?REDIS_CLUSTER_REQUEST_TTL) ->
+    {error, no_connection};
+query_noreply(Transaction, Slot, Counter) ->
+    %% Throttle retries
+    throttle_retries(Counter),
+
+    {Pool, _Version} = eredis_cluster_monitor:get_pool_by_slot(Slot),
+
+    eredis_cluster_pool:transaction(Pool, Transaction).
 
 %% =============================================================================
 %% @doc This function execute simple or pipelined command on a single redis node
@@ -298,7 +327,7 @@ optimistic_locking_transaction(WatchedKey, GetCommand, UpdateFunction) ->
         RedisResult = qw(Worker, [["MULTI"]] ++ UpdateCommand ++ [["EXEC"]]),
         {lists:last(RedisResult), Result}
     end,
-	case transaction(Transaction, Slot, {ok, undefined}, ?OL_TRANSACTION_TTL) of
+    case transaction(Transaction, Slot, {ok, undefined}, ?OL_TRANSACTION_TTL) of
         {{ok, undefined}, _} ->
             {error, resource_busy};
         {{ok, TransactionResult}, UpdateResult} ->
@@ -351,6 +380,9 @@ qa(Command) ->
 qw(Worker, Command) ->
     eredis_cluster_pool_worker:query(Worker, Command).
 
+-spec qw_noreply(Worker::pid(), redis_command()) -> redis_result().
+qw_noreply(Worker, Command) ->
+    eredis_cluster_pool_worker:query_noreply(Worker, Command).
 %% =============================================================================
 %% @doc Perform flushdb command on each node of the redis cluster
 %% @end
