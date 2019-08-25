@@ -444,7 +444,7 @@ get_key_slot(Key) ->
 get_key_from_command([[X|Y]|Z]) when is_bitstring(X) ->
     get_key_from_command([[bitstring_to_list(X)|Y]|Z]);
 get_key_from_command([[X|Y]|Z]) when is_list(X) ->
-    case string:to_lower(X) of
+    case string:to_lower(ensure_string(X)) of
         "multi" ->
             get_key_from_command(Z);
         _ ->
@@ -455,7 +455,7 @@ get_key_from_command([Term1,Term2|Rest]) when is_bitstring(Term1) ->
 get_key_from_command([Term1,Term2|Rest]) when is_bitstring(Term2) ->
     get_key_from_command([Term1,bitstring_to_list(Term2)|Rest]);
 get_key_from_command([Term1,Term2|Rest]) ->
-    case string:to_lower(Term1) of
+    case string:to_lower(ensure_string(Term1) of
         "info" ->
             undefined;
         "config" ->
@@ -486,3 +486,10 @@ get_key_from_rest([_,KeyName|_]) when is_list(KeyName) ->
     KeyName;
 get_key_from_rest(_) ->
     undefined.
+
+ensure_string(Term) when is_atom(Term) ->
+    atom_to_list(Term);
+ensure_string(Term) when is_bitstring(Term) ->
+    bitstring_to_list(Term);
+ensure_string(Term) ->
+    Term.
