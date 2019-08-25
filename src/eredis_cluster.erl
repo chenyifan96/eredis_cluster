@@ -455,7 +455,7 @@ get_key_from_command([Term1,Term2|Rest]) when is_bitstring(Term1) ->
 get_key_from_command([Term1,Term2|Rest]) when is_bitstring(Term2) ->
     get_key_from_command([Term1,bitstring_to_list(Term2)|Rest]);
 get_key_from_command([Term1,Term2|Rest]) ->
-    case string:to_lower(ensure_string(Term1) of
+    case string:to_lower(ensure_string(Term1)) of
         "info" ->
             undefined;
         "config" ->
