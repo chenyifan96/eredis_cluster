@@ -3,11 +3,12 @@
 
 %% API.
 -export([start_link/0]).
--export([connect/1]).
--export([refresh_mapping/1]).
--export([get_state/0, get_state_version/1]).
--export([get_pool_by_slot/1, get_pool_by_slot/2]).
--export([get_all_pools/0]).
+-export([start_link/1]).
+-export([connect/2]).
+-export([refresh_mapping/2]).
+-export([get_state/1, get_state_version/1]).
+-export([get_pool_by_slot/2, get_pool_by_slot/3]).
+-export([get_all_pools/1]).
 
 %% gen_server.
 -export([init/1]).
@@ -31,11 +32,20 @@
 start_link() ->
     gen_server:start_link({local,?MODULE}, ?MODULE, [], []).
 
-connect(InitServers) ->
-    gen_server:call(?MODULE,{connect,InitServers}).
+start_link(Name) ->
+    StringName = atom_to_list(Name)++ "_" ++ "eredis_cluster_monitor",
+    ServerName = list_to_atom(StringName),
+    gen_server:start_link({local,ServerName}, ?MODULE, [Name], []).
 
-refresh_mapping(Version) ->
-    gen_server:call(?MODULE,{reload_slots_map,Version}).
+connect(InitServers, Name) ->
+    StringName = atom_to_list(Name)++ "_" ++ "eredis_cluster_monitor",
+    ServerName = list_to_atom(StringName),
+    gen_server:call(ServerName,{connect,InitServers, Name}).
+
+refresh_mapping(Version, Name) ->
+    StringName = atom_to_list(Name)++ "_" ++ "eredis_cluster_monitor",
+    ServerName = list_to_atom(StringName),
+    gen_server:call(ServerName,{reload_slots_map,Version,Name}).
 
 %% =============================================================================
 %% @doc Given a slot return the link (Redis instance) to the mapped
@@ -43,17 +53,19 @@ refresh_mapping(Version) ->
 %% @end
 %% =============================================================================
 
--spec get_state() -> #state{}.
-get_state() ->
-    [{cluster_state, State}] = ets:lookup(?MODULE, cluster_state),
+-spec get_state(atom()) -> #state{}.
+get_state(Name) ->
+    EtsStringName = atom_to_list(Name)++ "_" ++ "eredis_cluster_monitor",
+    EtsName = list_to_atom(EtsStringName),
+    [{cluster_state, State}] = ets:lookup(EtsName, cluster_state),
     State.
 
 get_state_version(State) ->
     State#state.version.
 
--spec get_all_pools() -> [pid()].
-get_all_pools() ->
-    State = get_state(),
+-spec get_all_pools(atom()) -> [pid()].
+get_all_pools(Name) ->
+    State = get_state(Name),
     SlotsMapList = tuple_to_list(State#state.slots_maps),
     [SlotsMap#slots_map.node#node.pool || SlotsMap <- SlotsMapList,
         SlotsMap#slots_map.node =/= undefined].
@@ -63,9 +75,9 @@ get_all_pools() ->
 %% to prevent from querying ets inside loops.
 %% @end
 %% =============================================================================
--spec get_pool_by_slot(Slot::integer(), State::#state{}) ->
+-spec get_pool_by_slot(Slot::integer(), State::#state{},atom())->
     {PoolName::atom() | undefined, Version::integer()}.
-get_pool_by_slot(Slot, State) -> 
+get_pool_by_slot(Slot, State, _Name) -> 
     Index = element(Slot+1,State#state.slots),
     Cluster = element(Index,State#state.slots_maps),
     if
@@ -75,16 +87,16 @@ get_pool_by_slot(Slot, State) ->
             {undefined, State#state.version}
     end.
 
--spec get_pool_by_slot(Slot::integer()) ->
+-spec get_pool_by_slot(Slot::integer(),atom()) ->
     {PoolName::atom() | undefined, Version::integer()}.
-get_pool_by_slot(Slot) ->
-    State = get_state(),
-    get_pool_by_slot(Slot, State).
+get_pool_by_slot(Slot, Name) ->
+    State = get_state(Name),
+    get_pool_by_slot(Slot, State, Name).
 
-maybe_reload_slots_map(State) ->
+maybe_reload_slots_map(State, Name) ->
     try
         NewState =  
-            reload_slots_map(State),
+            reload_slots_map(State, Name),
         {ok,NewState}
     catch
         {error,cannot_connect_to_cluster} ->
@@ -93,8 +105,8 @@ maybe_reload_slots_map(State) ->
             {error,State}
     end.
 
--spec reload_slots_map(State::#state{}) -> NewState::#state{}.
-reload_slots_map(State) ->
+-spec reload_slots_map(State::#state{},atom()) -> NewState::#state{}.
+reload_slots_map(State, Name) ->
     [close_connection(SlotsMap)
         || SlotsMap <- tuple_to_list(State#state.slots_maps)],
 
@@ -109,8 +121,9 @@ reload_slots_map(State) ->
         slots_maps = list_to_tuple(ConnectedSlotsMaps),
         version = State#state.version + 1
     },
-
-    true = ets:insert(?MODULE, [{cluster_state, NewState}]),
+    EtsStringName = atom_to_list(Name)++ "_" ++ "eredis_cluster_monitor",
+    EtsName = list_to_atom(EtsStringName),
+    true = ets:insert(EtsName, [{cluster_state, NewState}]),
 
     NewState.
 
@@ -211,10 +224,10 @@ connect_all_slots(SlotsMapList) ->
     [SlotsMap#slots_map{node=connect_node(SlotsMap#slots_map.node)}
         || SlotsMap <- SlotsMapList].
 
--spec connect_([{Address::string(), Port::integer()}]) -> #state{}.
-connect_([]) ->
+-spec connect_([{Address::string(), Port::integer()}],atom()) -> #state{}.
+connect_([],_Name) ->
     #state{};
-connect_(InitNodes) ->
+connect_(InitNodes,Name) ->
     State = #state{
         slots = undefined,
         slots_maps = {},
@@ -222,26 +235,35 @@ connect_(InitNodes) ->
         version = 0
     },
 
-    reload_slots_map(State).
+    reload_slots_map(State, Name).
 
 %% gen_server.
 
-init(_Args) ->
-    ets:new(?MODULE, [protected, set, named_table, {read_concurrency, true}]),
-    InitNodes = application:get_env(eredis_cluster, init_nodes, []),
-    {ok, connect_(InitNodes)}.
+init([Name]) ->
+    EtsStringName = atom_to_list(Name)++ "_" ++ "eredis_cluster_monitor",
+    EtsName = list_to_atom(EtsStringName),
+    ets:new(EtsName, [protected, set, named_table, {read_concurrency, true}]),
+    StrNodeName = atom_to_list(Name)++ "_" ++ "nodes",
+    NodeList = list_to_atom(StrNodeName),
+    InitNodes = application:get_env(eredis_cluster, NodeList, []),
+    {ok, connect_(InitNodes, Name)}.
 
-handle_call({reload_slots_map,Version}, _From, #state{version=Version} = State) ->
-    case maybe_reload_slots_map(State) of
+handle_call({reload_slots_map,Version, Name}, _From, #state{version=Version} = State) ->
+    case maybe_reload_slots_map(State, Name) of
         {ok,NewState} ->
             {reply, ok, NewState};
         {error, NewState} ->
             {reply, error, NewState}
     end;
-handle_call({reload_slots_map,_}, _From, State) ->
+handle_call({reload_slots_map,_,_Name}, _From, State) ->
     {reply, ok, State};
-handle_call({connect, InitServers}, _From, _State) ->
-    {reply, ok, connect_(InitServers)};
+handle_call({connect, InitServers,Name}, _From, _State) ->
+    {reply, ok, connect_(InitServers, Name)};
+handle_call({get_pool_by_slot, Slot, Name}, _From, State) ->
+    Result = get_pool_by_slot(Slot,Name),
+    {reply,Result,State};
+handle_call({get_state,Name}, _From, State) ->
+    {reply,get_state(Name),State};
 handle_call(_Request, _From, State) ->
     {reply, ignored, State}.
 
