@@ -245,10 +245,7 @@ init([Name]) ->
     EtsName = list_to_atom(EtsStringName),
     ets:new(EtsName, [protected, set, named_table, {read_concurrency, true}]),
     NodeInfo = application:get_env(message_store, Name, []),
-    Host = proplists:get_value(host, NodeInfo, "redis"),
-    Port = proplists:get_value(port, NodeInfo, 6379),
-    Node = {Host,Port},
-    InitNodes = [Node],
+    InitNodes = get_host_port(NodeInfo),
     {ok, connect_(InitNodes, Name)}.
 
 handle_call({reload_slots_map,Version, Name}, _From, #state{version=Version} = State) ->
@@ -281,3 +278,23 @@ terminate(_Reason, _State) ->
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
+
+
+%%%%%%%%%%%%%%%%%%%%%%%
+%%%internal
+%%%%%%%%%%%%%%%%%%%%%%%
+get_host_port(Args) ->
+    Host = proplists:get_value(host, Args, undefined),
+    Port = proplists:get_value(port, Args, undefined),
+    case (Host /= undefined) and (Port =/= undefined) of
+        true ->
+            [{Host, Port}];
+        false ->
+            HostPortList = proplists:get_value(host_port_list, Args, []),
+            HostPortList
+    end.
+
+
+
+
+
