@@ -28,7 +28,7 @@ create(Host, Port, Name) ->
                           {password, Password}
                          ],
 
-            Size = proplists:get_value(pool_size, NodeInfo, 0),
+            Size = proplists:get_value(pool_size, NodeInfo, 10),
             MaxOverflow = proplists:get_value(max_overflow, NodeInfo, 0),
 
             PoolArgs = [{name, {local, PoolName}},
