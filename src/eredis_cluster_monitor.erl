@@ -33,18 +33,15 @@ start_link() ->
     gen_server:start_link({local,?MODULE}, ?MODULE, [], []).
 
 start_link(Name) ->
-    StringName = atom_to_list(Name)++ "_" ++ "eredis_cluster_monitor",
-    ServerName = list_to_atom(StringName),
+    ServerName = get_server_name(Name),
     gen_server:start_link({local,ServerName}, ?MODULE, [Name], []).
 
 connect(InitServers, Name) ->
-    StringName = atom_to_list(Name)++ "_" ++ "eredis_cluster_monitor",
-    ServerName = list_to_atom(StringName),
+    ServerName = get_server_name(Name),
     gen_server:call(ServerName,{connect,InitServers, Name}).
 
 refresh_mapping(Version, Name) ->
-    StringName = atom_to_list(Name)++ "_" ++ "eredis_cluster_monitor",
-    ServerName = list_to_atom(StringName),
+    ServerName = get_server_name(Name),
     gen_server:call(ServerName,{reload_slots_map,Version,Name}).
 
 %% =============================================================================
@@ -55,8 +52,7 @@ refresh_mapping(Version, Name) ->
 
 -spec get_state(atom()) -> #state{}.
 get_state(Name) ->
-    EtsStringName = atom_to_list(Name)++ "_" ++ "eredis_cluster_monitor",
-    EtsName = list_to_atom(EtsStringName),
+    ServerName = get_server_name(Name),
     [{cluster_state, State}] = ets:lookup(EtsName, cluster_state),
     State.
 
@@ -121,8 +117,7 @@ reload_slots_map(State, Name) ->
         slots_maps = list_to_tuple(ConnectedSlotsMaps),
         version = State#state.version + 1
     },
-    EtsStringName = atom_to_list(Name)++ "_" ++ "eredis_cluster_monitor",
-    EtsName = list_to_atom(EtsStringName),
+    ServerName = get_server_name(Name),
     true = ets:insert(EtsName, [{cluster_state, NewState}]),
 
     NewState.
@@ -241,8 +236,7 @@ connect_(InitNodes,Name) ->
 %% gen_server.
 
 init([Name]) ->
-    EtsStringName = atom_to_list(Name)++ "_" ++ "eredis_cluster_monitor",
-    EtsName = list_to_atom(EtsStringName),
+    ServerName = get_server_name(Name),
     ets:new(EtsName, [protected, set, named_table]),
     NodeInfo = application:get_env(message_store, Name, []),
     InitNodes = get_host_port(NodeInfo),
@@ -294,7 +288,10 @@ get_host_port(Args) ->
             HostPortList
     end.
 
-
+get_server_name(Name) ->
+    StringName = atom_to_list(Name)++ "_" ++ "eredis_cluster_monitor",
+    ServerName = list_to_atom(StringName),
+    ServerName.
 
 
 
