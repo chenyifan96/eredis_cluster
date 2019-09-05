@@ -52,7 +52,7 @@ refresh_mapping(Version, Name) ->
 
 -spec get_state(atom()) -> #state{}.
 get_state(Name) ->
-    ServerName = get_server_name(Name),
+    EtsName = get_server_name(Name),
     [{cluster_state, State}] = ets:lookup(EtsName, cluster_state),
     State.
 
@@ -117,7 +117,7 @@ reload_slots_map(State, Name) ->
         slots_maps = list_to_tuple(ConnectedSlotsMaps),
         version = State#state.version + 1
     },
-    ServerName = get_server_name(Name),
+    EtsName = get_server_name(Name),
     true = ets:insert(EtsName, [{cluster_state, NewState}]),
 
     NewState.
@@ -236,7 +236,7 @@ connect_(InitNodes,Name) ->
 %% gen_server.
 
 init([Name]) ->
-    ServerName = get_server_name(Name),
+    EtsName = get_server_name(Name),
     ets:new(EtsName, [protected, set, named_table]),
     NodeInfo = application:get_env(message_store, Name, []),
     InitNodes = get_host_port(NodeInfo),
