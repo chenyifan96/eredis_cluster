@@ -119,21 +119,13 @@ qmn2([], [], Acc, _, _Name) ->
     [Res || {_,Res} <- SortedAcc].
 
 split_by_pools(Commands, Name) ->
-    StringName = atom_to_list(Name)++ "_" ++ "eredis_cluster_monitor",
-    ServerName = list_to_atom(StringName),
-%%    State = eredis_cluster_monitor:get_state(),
-    Requet = {get_state,Name},
-    State = gen_server:call(ServerName,Requet,?TIMEOUT),
+    State = eredis_cluster_monitor:get_state(Name),
     split_by_pools(Commands, 1, [], [], State, Name).
 
 split_by_pools([Command | T], Index, CmdAcc, MapAcc, State, Name) ->
     Key = get_key_from_command(Command),
     Slot = get_key_slot(Key),
-%%    {Pool, _Version} = eredis_cluster_monitor:get_pool_by_slot(Slot, State),
-    StringName = atom_to_list(Name)++ "_" ++ "eredis_cluster_monitor",
-    ServerName = list_to_atom(StringName),
-    Request = {get_pool_by_slot, Slot, Name},
-    {Pool, _Version} = gen_server:call(ServerName,Request,?TIMEOUT),
+    {Pool, _Version} = eredis_cluster_monitor:get_pool_by_slot(Slot, Name),
     {NewAcc1, NewAcc2} =
         case lists:keyfind(Pool, 1, CmdAcc) of
             false ->
@@ -184,11 +176,7 @@ query_noreply(Transaction, Slot, Counter, Name) ->
     %% Throttle retries
     throttle_retries(Counter),
 
-%%    {Pool, _Version} = eredis_cluster_monitor:get_pool_by_slot(Slot),
-    StringName = atom_to_list(Name)++ "_" ++ "eredis_cluster_monitor",
-    ServerName = list_to_atom(StringName),
-    Request = {get_pool_by_slot, Slot, Name},
-    {Pool, _Version} = gen_server:call(ServerName, Request, ?TIMEOUT),
+    {Pool, _Version} = eredis_cluster_monitor:get_pool_by_slot(Slot,Name),
     eredis_cluster_pool:transaction(Pool, Transaction).
 
 %% =============================================================================
@@ -221,11 +209,7 @@ query(Transaction, Slot, Counter, Name) ->
     %% Throttle retries
     throttle_retries(Counter),
 
-%%    {Pool, Version} = eredis_cluster_monitor:get_pool_by_slot(Slot),
-    StringName = atom_to_list(Name)++ "_" ++ "eredis_cluster_monitor",
-    ServerName = list_to_atom(StringName),
-    Request = {get_pool_by_slot, Slot, Name},
-    {Pool, Version} = gen_server:call(ServerName, Request, ?TIMEOUT),
+    {Pool, Version} = eredis_cluster_monitor:get_pool_by_slot(Slot,Name),
     Result = eredis_cluster_pool:transaction(Pool, Transaction),
     case handle_transaction_result(Result, Version, Name) of 
         retry -> query(Transaction, Slot, Counter + 1, Name);

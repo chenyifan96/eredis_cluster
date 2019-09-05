@@ -37,13 +37,14 @@ init([]) ->
 %%%%%%%%%%%%%%%%%%%%%
 
 init_cluster() ->
-    ClusterList = application:get_env(message_store,redis, []),
+    ClusterList = application:get_env(message_store,redis_cluster, []),
     init_cluster(ClusterList, []).
 
 init_cluster([], Ret) ->
     Ret;
 init_cluster([Name | List], Ret) ->
     ChildSpec = init_spec(Name),
+    ets:insert(redis_choose,[{Name,eredis_cluster}]),
     init_cluster(List, [ChildSpec|Ret]).
 
 

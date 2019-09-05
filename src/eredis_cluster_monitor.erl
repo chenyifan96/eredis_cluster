@@ -243,7 +243,7 @@ connect_(InitNodes,Name) ->
 init([Name]) ->
     EtsStringName = atom_to_list(Name)++ "_" ++ "eredis_cluster_monitor",
     EtsName = list_to_atom(EtsStringName),
-    ets:new(EtsName, [protected, set, named_table, {read_concurrency, true}]),
+    ets:new(EtsName, [protected, set, named_table]),
     NodeInfo = application:get_env(message_store, Name, []),
     InitNodes = get_host_port(NodeInfo),
     {ok, connect_(InitNodes, Name)}.
