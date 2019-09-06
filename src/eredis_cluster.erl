@@ -125,13 +125,14 @@ split_by_pools(Commands, Name) ->
 split_by_pools([Command | T], Index, CmdAcc, MapAcc, State, Name) ->
     Key = get_key_from_command(Command),
     Slot = get_key_slot(Key),
+    NewCommad = ensure_command_string(Command),
     {Pool, _Version} = eredis_cluster_monitor:get_pool_by_slot(Slot, Name),
     {NewAcc1, NewAcc2} =
         case lists:keyfind(Pool, 1, CmdAcc) of
             false ->
-                {[{Pool, [Command]} | CmdAcc], [{Pool, [Index]} | MapAcc]};
+                {[{Pool, [NewCommad]} | CmdAcc], [{Pool, [Index]} | MapAcc]};
             {Pool, CmdList} ->
-                CmdList2 = [Command | CmdList],
+                CmdList2 = [NewCommad | CmdList],
                 CmdAcc2  = lists:keydelete(Pool, 1, CmdAcc),
                 {Pool, MapList} = lists:keyfind(Pool, 1, MapAcc),
                 MapList2 = [Index | MapList],
@@ -491,3 +492,9 @@ ensure_string(Term) when is_bitstring(Term) ->
     bitstring_to_list(Term);
 ensure_string(Term) ->
     Term.
+
+ensure_command_string([Option|_Other] = Command) when is_list(Command) ->
+    NewOption = ensure_string(Option),
+    [NewOption]++_Other;
+ensure_command_string(Other) ->
+    Other.
