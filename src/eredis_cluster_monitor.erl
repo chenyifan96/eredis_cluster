@@ -237,7 +237,7 @@ connect_(InitNodes,Name) ->
 
 init([Name]) ->
     EtsName = get_server_name(Name),
-    ets:new(EtsName, [protected, set, named_table]),
+    ets:new(EtsName, [protected, set, named_table, {read_concurrency, true}]),
     NodeInfo = application:get_env(message_store, Name, []),
     InitNodes = get_host_port(NodeInfo),
     {ok, connect_(InitNodes, Name)}.
