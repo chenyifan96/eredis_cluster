@@ -26,7 +26,7 @@
 -export([transaction/1, transaction/2]).
 
 %% Commands to named cluster
--export([q/2, qk/3, qa/2, qa2/2, qmn/2]).
+-export([q/2, qk/3, q_noreply/2, qa/2, qa2/2, qmn/2]).
 -export([transaction/3]).
 
 %% Specific redis command implementation (default cluster)
@@ -199,6 +199,11 @@ qk(Cluster, Command, Key) ->
 q_noreply(Command) ->
     PoolKey = get_key_from_command(Command),
     query_noreply(?default_cluster, Command, PoolKey).
+
+-spec q_noreply(Cluster :: atom(), Command :: redis_command()) -> ok.
+q_noreply(Cluster, Command) ->
+    PoolKey = get_key_from_command(Command),
+    query_noreply(Cluster, Command, PoolKey).
 
 %% =============================================================================
 %% @doc Executes a pipeline of commands.
