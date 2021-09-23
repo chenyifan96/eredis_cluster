@@ -580,13 +580,14 @@ split_by_pools(Cluster, Commands) ->
 split_by_pools([Command | T], Index, CmdAcc, MapAcc, State) ->
     Key = get_key_from_command(Command),
     Slot = get_key_slot(Key),
+    NewCommad = ensure_command_string(Command),
     {Pool, _Version} = eredis_cluster_monitor:get_pool_by_slot(Slot, State),
     {NewAcc1, NewAcc2} =
         case lists:keyfind(Pool, 1, CmdAcc) of
             false ->
-                {[{Pool, [Command]} | CmdAcc], [{Pool, [Index]} | MapAcc]};
+                {[{Pool, [NewCommad]} | CmdAcc], [{Pool, [Index]} | MapAcc]};
             {Pool, CmdList} ->
-                CmdList2 = [Command | CmdList],
+                CmdList2 = [NewCommad | CmdList],
                 CmdAcc2  = lists:keydelete(Pool, 1, CmdAcc),
                 {Pool, MapList} = lists:keyfind(Pool, 1, MapAcc),
                 MapList2 = [Index | MapList],
@@ -1098,7 +1099,7 @@ get_key_slot(Key) ->
 get_key_from_command([[X|Y]|Z]) when is_bitstring(X) ->
     get_key_from_command([[bitstring_to_list(X)|Y]|Z]);
 get_key_from_command([[X|Y]|Z]) when is_list(X) ->
-    case string:to_lower(X) of
+    case string:to_lower(ensure_string(X)) of
         "multi" ->
             get_key_from_command(Z);
         _ ->
@@ -1107,7 +1108,7 @@ get_key_from_command([[X|Y]|Z]) when is_list(X) ->
 get_key_from_command([Name | Args]) when is_bitstring(Name) ->
     get_key_from_command([bitstring_to_list(Name) | Args]);
 get_key_from_command([Name | [Arg|_Rest]=Args]) ->
-    case string:to_lower(Name) of
+    case string:to_lower(ensure_string(Name)) of
         "info"       -> undefined;
         "config"     -> undefined;
         "shutdown"   -> undefined;
@@ -1149,7 +1150,7 @@ arg_after_keyword(_Keyword, [_Arg]) ->
 arg_after_keyword(Keyword, [Arg|Args]) when is_binary(Arg) ->
     arg_after_keyword(Keyword, [binary_to_list(Arg)|Args]);
 arg_after_keyword(Keyword, [Arg|Args]) ->
-    case string:to_lower(Arg) of
+    case string:to_lower(ensure_string(Arg)) of
         Keyword ->
             maybe_binary_to_list(hd(Args));
         _Mismatch ->
@@ -1159,10 +1160,23 @@ arg_after_keyword(Keyword, [Arg|Args]) ->
 memory_arg([Subcommand | Args]) when is_binary(Subcommand) ->
     memory_arg([binary_to_list(Subcommand) | Args]);
 memory_arg([Subcommand | Args]) ->
-    case string:to_lower(Subcommand) of
+    case string:to_lower(ensure_string(Subcommand)) of
         "usage" -> nth_arg(1, Args);
         _Other  -> undefined
     end.
+
+ensure_string(Term) when is_atom(Term) ->
+    atom_to_list(Term);
+ensure_string(Term) when is_bitstring(Term) ->
+    bitstring_to_list(Term);
+ensure_string(Term) ->
+    Term.
+
+ensure_command_string([Option|_Other] = Command) when is_list(Command) ->
+    NewOption = ensure_string(Option),
+    [NewOption]++_Other;
+ensure_command_string(Other) ->
+    Other.
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
