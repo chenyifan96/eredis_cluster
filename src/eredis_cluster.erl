@@ -22,8 +22,9 @@
 -export([connect/1, connect/2, connect/3, disconnect/1]).
 
 %% Generic redis call (default cluster)
--export([q/1, qk/2, q_noreply/1, qp/1, qa/1, qa2/1, qn/2, qw/2, qmn/1]).
+-export([q/1, qk/2, q_noreply/1, qp/1, qa/1, qa2/1, qn/2, qw/2, qw/3, qmn/1]).
 -export([transaction/1, transaction/2]).
+-export([get_redis_timeout/1]).
 
 %% Commands to named cluster
 -export([q/2, qk/3, q_noreply/2, qa/2, qa2/2, qmn/2]).
@@ -343,6 +344,20 @@ qw(Connection, [[X|_]|_] = Commands) when is_list(X); is_binary(X) ->
 qw(Connection, Command) ->
     eredis:q(Connection, Command).
 
+qw(Cluster, Connection, [[X|_]|_] = Commands) when is_list(X); is_binary(X) ->
+    Timeout = get_cluster_request_timeout(Cluster),
+    eredis:qp(Connection, Commands, Timeout);
+qw(Cluster, Connection, Command) ->
+    Timeout = get_cluster_request_timeout(Cluster),
+    eredis:q(Connection, Command, Timeout).
+
+get_cluster_request_timeout(Cluster) ->
+    ClusterModule = application:get_env(eredis_cluster, callback_module, ?MODULE),
+    ClusterModule:get_redis_timeout(Cluster).
+
+get_redis_timeout(_Cluster) ->
+    5000.
+
 -spec qw_noreply(Connection::pid(), Command::redis_command()) -> ok.
 qw_noreply(Connection, Command) ->
     eredis:q_noreply(Connection, Command).
@@ -398,7 +413,7 @@ qmn(Cluster, Commands, Counter) ->
 
 qmn2(Cluster, [{Pool, PoolCommands} | T1], [{Pool, Mapping} | T2], Acc,
      Version) ->
-    Transaction = fun(Worker) -> qw(Worker, PoolCommands) end,
+    Transaction = fun(Worker) -> qw(Cluster, Worker, PoolCommands) end,
     Result = eredis_cluster_pool:transaction(Pool, Transaction),
     case handle_transaction_result(Result, Cluster, Version) of
         retry -> retry;
@@ -627,7 +642,7 @@ query(Cluster, Command, PoolKey, Counter) ->
     Slot = get_key_slot(PoolKey),
     State = eredis_cluster_monitor:get_state(Cluster),
     {Pool, Version} = eredis_cluster_monitor:get_pool_by_slot(Slot, State),
-    Result0 = eredis_cluster_pool:transaction(Pool, fun(W) -> qw(W, Command) end),
+    Result0 = eredis_cluster_pool:transaction(Pool, fun(W) -> qw(Cluster, W, Command) end),
     Result = handle_redirects(Cluster, Command, Result0, Version),
     case handle_transaction_result(Result, Cluster, Version) of
         retry  -> query(Cluster, Command, PoolKey, Counter + 1);
